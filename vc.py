@@ -1,43 +1,49 @@
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
-import itertools
+import asyncio
 
-BOT_TOKEN = '7620447701:AAHI49UiMBSDEo-dJku132fS4TnKl7jHeKY'
-AUTHORIZED_USER_ID = 7660776851
-CHAT_ID = -1002176107287
+BOT_TOKEN = "7620447701:AAHI49UiMBSDEo-dJku132fS4TnKl7jHeKY"
+CHANNEL_ID = -1002176107287
+AUTHORIZED_USER_ID = 7660776851  # 🔒 Sirf aapka Telegram User ID yahan daalein
 
-message_cycle = None
 job_ref = None
+messages = []
+index = 0
+
+async def send_next(context: ContextTypes.DEFAULT_TYPE):
+    global index
+    if messages:
+        msg = messages[index]
+        await context.bot.send_message(chat_id=CHANNEL_ID, text=msg)
+        index = (index + 1) % len(messages)
 
 async def startloop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global message_cycle, job_ref
+    global job_ref, messages, index
 
     if update.effective_user.id != AUTHORIZED_USER_ID:
+        await update.message.reply_text("⛔ You're not authorized to control this bot.")
         return
 
-    if job_ref is not None:
-        await update.message.reply_text("⚠️ Already looping!")
+    if job_ref:
+        await update.message.reply_text("⚠️ Loop already running.")
         return
 
     if not context.args:
         await update.message.reply_text("Usage: /startloop msg1 | msg2 | msg3 ...")
         return
 
-    full_text = ' '.join(context.args)
-    messages = [msg.strip() for msg in full_text.split('|') if msg.strip()]
-    message_cycle = itertools.cycle(messages)
-
-    async def send_next(context: ContextTypes.DEFAULT_TYPE):
-        next_msg = next(message_cycle)
-        await context.bot.send_message(chat_id=CHAT_ID, text=next_msg)
+    full_msg = " ".join(context.args)
+    messages = [msg.strip() for msg in full_msg.split("|") if msg.strip()]
+    index = 0
 
     job_ref = context.job_queue.run_repeating(send_next, interval=5, first=0)
-    await update.message.reply_text("✅ Loop started every 5 sec.")
+    await update.message.reply_text("✅ Loop started.")
 
 async def stoploop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global job_ref
 
     if update.effective_user.id != AUTHORIZED_USER_ID:
+        await update.message.reply_text("⛔ You're not authorized to stop this.")
         return
 
     if job_ref:
@@ -45,7 +51,7 @@ async def stoploop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         job_ref = None
         await update.message.reply_text("🛑 Loop stopped.")
     else:
-        await update.message.reply_text("⚠️ Loop not running.")
+        await update.message.reply_text("⚠️ No loop running.")
 
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
